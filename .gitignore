@@ -1,0 +1,4 @@
+#Large files
+*.csv
+*.RData
+*.Rhistory
