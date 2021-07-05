@@ -7,7 +7,11 @@ if (!require(smotefamily)) install.packages('smotefamily') # for smote implement
 if (!require(rpart)) install.packages('rpart')             # for decision tree model
 if (!require(Rborist)) install.packages('Rborist')         # for random forest model
 if (!require(corrplot)) install.packages('corrplot')       # for data visualization
-if (!require(ROSE)) install.packages('ROSE')       # for ROC curves
+if (!require(ROSE)) install.packages('ROSE')               # for ROC curves
+if (!require(xgboost)) install.packages('xgboost')         # for xgboost curves
+if (!require(knitr)) install.packages("knitr")
+if (!require(kableExtra)) install.packages('kableExtra')   # for tables
+
 
 # -----------------------------------------------
 # Unzipping data located in /data/creditCard.zip
@@ -28,12 +32,11 @@ if(!exists("fraud_data")){
 # Data verification, check na, empty and proportion
 # -------------------------------------------------
 
-# Check na in the data set
-no_na <- sum(is.na(fraud_data))
-
 # Take a look to our data
 glimpse(fraud_data)
 
+# Check na in the data set
+no_na <- sum(is.na(fraud_data))
 
 # Check amount col if has negative values
 no_negative <- sum(fraud_data$Amount < 0)
@@ -55,12 +58,48 @@ fraud_data %>% group_by(Class) %>% count() # Highly unbalanced 492 frauds vs 284
 # Data Visualization,
 # -------------------------------------------------
 
+# Visualizing features
+sample <- fraud_data[1:10000,]
+
+# Checking all but time values
+ggplot(stack(fraud_data[,-c(1,30, 31)]), aes(ind, values)) + 
+  geom_boxplot(color = "black", fill = I("deepskyblue4")) +
+  labs(
+    x = "Feature",
+    y = "Value")
+
+# Checking time values
+fraud_data %>%
+  ggplot(aes(Time)) +
+  geom_histogram(bins = 100, color = "black", fill = I("deepskyblue4")) + 
+  labs(
+     x = "Time (Seconds since the first transaction in the dataset)",
+     y = "Count with that time")
+
 # Visualization of time values
 fraud_data %>%
   ggplot(aes(x = Time, fill = factor(Class))) + geom_histogram(bins = 100)+
   labs(x = 'Time in seconds since first transaction', y = 'Number of transactions') +
   ggtitle('Distribution of time of transaction by class') +
   facet_grid(Class ~ ., scales = 'free_y')
+
+# Checking Amount values
+fraud_data %>%
+  ggplot(aes(Amount)) +
+  geom_histogram(binwidth = 10, color = "black", fill = I("deepskyblue4")) + 
+  labs(
+    x = "Amount (Dollars for trasaction)",
+    y = "Count") +
+  xlim(-101,1000)
+
+# Visualization of Amount values
+fraud_data %>%
+  ggplot(aes(x = Amount, fill = factor(Class))) + geom_histogram(binwidth = 5)+
+  labs(x = 'Amount transaction', y = 'Number of transactions') +
+  ggtitle('Distribution of transaction amount by class') +
+  facet_grid(Class ~ ., scales = 'free_y') + 
+  xlim(-101,500)
+
 
 # Correlations plot
 correlations <- cor(fraud_data[,-which(names(fraud_data) %in% c("Time", "Class"))], method="pearson")
@@ -83,20 +122,19 @@ ggplot(tsne_mat, aes(x = V1, y = V2)) +
 # Data Partition
 # -------------------------------------------------
 
-# A we have a very unbalance dataset the procedure will consist in split data into train and test 5 times
-# in order to perform cross validation. For this we will divide the data in 5 sections, each one of this sections
-# will be the test data in each cross validation set and the rest for training, allowing us to have a 80 to 20
-# relation between train and test data, and having different test data for each one of the sets.
+# A we have a very unbalance dataset the procedure will consist in split data into train and test, to have a 80 to 20
+# relation between train and test data.
 
-# Each training data will be upsampled in the fraud cases in order to have a balance training dataset.
+# Training data will be upsampled in the fraud cases in order to have a balance training dataset. Test data will 
+# remain untouch
 # The upsample method will be SMOTE (synthetic minority oversampling technique)
 
 # Getting our 5 test samples
 set.seed(2021)
 index <- createDataPartition(y = fraud_data$Class, times = 5, p = .8, list = FALSE)
 
-train_data <- fraud_data[index[,1],]
-test_data <- fraud_data[-index[,1],]
+train_data <- fraud_data[index,]
+test_data <- fraud_data[-index,]
 
 
 # Applying SMOTE
@@ -191,15 +229,71 @@ CART_SM_roc <- ROSE::roc.curve(test_data$Class, CART_Sm_pred[,2], plotit = TRUE)
 CART_SM_roc_val <- CART_SM_roc$auc
 
 
-# ------ 3.- Random Forest with balance output
-x <- train[,-31]
-y <- as.factor(train[,31])
+# ------ 3.- Random Forest with balanced train data
+x <- train[,-which(names(train) %in% c("class"))]
+y <- as.factor(train$class)
 rf_fit <- Rborist(x, y, ntree = 1000, minNode = 20, maxLeaf = 13)
 
-rf_pred <- predict(rf_fit, test_data[,-31], ctgCensus = "prob")
+rf_pred <- predict(rf_fit, test_data[,-which(names(test_data) %in% c("Class"))], ctgCensus = "prob")
 rf_prob <- rf_pred$prob
 
 rf_roc <- ROSE::roc.curve(test_data$Class, rf_prob[,2], plotit = TRUE)
 rf_roc_val <- rf_roc$auc
+
+
+# ------ 4.- XGBoost with balance train
+xgb <- xgboost::xgboost(data = data.matrix(train[,-31]), 
+               label = as.numeric(train[,31]),
+               eta = 0.1,
+               gamma = 0.1,
+               max_depth = 10, 
+               nrounds = 300, 
+               objective = "binary:logistic",
+               colsample_bytree = 0.6,
+               verbose = 0,
+               nthread = 7)
+
+xgb_pred <- predict(xgb, data.matrix(test_data[,-31]))
+
+xgb_roc <- ROSE::roc.curve(test_data$Class, xgb_pred, plotit = TRUE)
+xgb_roc_val <- xgb_roc$auc
+
+# Importance plot
+names <- dimnames(data.matrix(train[,-31]))[[2]]
+
+# Compute feature importance matrix
+importance_matrix <- xgboost::xgb.importance(names, model = xgb)
+
+# Nice graph
+xgboost::xgb.plot.importance(importance_matrix[1:7,])  
+
+# Train with only top 7 variables
+train_t7 <- train[,which(names(train) %in% importance_matrix$Feature[1:7])]
+xgb_t7 <- xgboost::xgboost(data = data.matrix(train_t7), 
+                        label = as.numeric(train$class),
+                        eta = 0.1,
+                        gamma = 0.1,
+                        max_depth = 10, 
+                        nrounds = 300, 
+                        objective = "binary:logistic",
+                        colsample_bytree = 0.6,
+                        verbose = 0,
+                        nthread = 7)
+
+xgb_pred_t7 <- predict(xgb_t7,data.matrix(test_data[,which(names(test_data) %in% importance_matrix$Feature[1:7])]))
+
+xgb_roc_t7 <- ROSE::roc.curve(test_data$Class, xgb_pred_t7, plotit = TRUE)
+xgb_roc_val_t7 <- xgb_roc_t7$auc
+
+# Conclussions
+
+# Summarizing ROC Scores
+results <- data.frame(Method = c("Random","noFraud","dummy Stadistics",
+                                 "CART no UpSample","CART Upsample","Random Forest","XGBoost","XGBoost top 7"),
+                      ROC_value=c(random_roc_val,noFraud_roc_val, stadistic_roc_val,
+                                  CART_noSM_roc_val, CART_SM_roc_val, rf_roc_val, xgb_roc_val, xgb_roc_val_t7))
+results
+
+
 
 

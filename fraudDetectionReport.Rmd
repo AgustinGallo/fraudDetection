@@ -1,0 +1,543 @@
+---
+title: "**Fraud Detection**"
+subtitle: "HarvardX PH125.9X - Data Science Capston pt. II"
+author: "**Agustin Gallo Fernandez**"
+date: "4/7/2021"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    highlight: pygments
+    keep_tex: true
+include-before: '`\newpage{}`{=latex}'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.align = 'center', out.width="70%", cache=TRUE, cache.lazy = FALSE, message = FALSE, crop = knitr::hook_pdfcrop)
+if (!require(tidyverse)) install.packages('tidyverse')     # Data manipulation
+if (!require(caret)) install.packages('caret')             # Data split
+if (!require(Metrics)) install.packages('Metrics')         # Evaluate results
+if (!require(rstudioapi)) install.packages('rstudioapi')   # for rstudio working dir
+if (!require(Rtsne)) install.packages('Rtsne')             # for tsne plotting
+if (!require(smotefamily)) install.packages('smotefamily') # for smote implementation
+if (!require(rpart)) install.packages('rpart')             # for decision tree model
+if (!require(Rborist)) install.packages('Rborist')         # for random forest model
+if (!require(corrplot)) install.packages('corrplot')       # for data visualization
+if (!require(ROSE)) install.packages('ROSE')               # for ROC curves
+if (!require(xgboost)) install.packages('xgboost')         # for xgboost curves
+if(!require(knitr)) install.packages("knitr")
+if (!require(kableExtra)) install.packages('kableExtra')   # for tables
+#if (!require(LaTex)) tinytex::install_tinytex()
+
+```
+
+```{r unziping_files, echo=FALSE}
+# -----------------------------------------------
+# Unzipping data located in /data/creditCard.zip
+# -----------------------------------------------
+# Setting working directory
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+if (!file.exists("data/creditcard.csv")){
+  unzip("data/creditCard.zip", exdir = "data")
+}
+
+if(!exists("fraud_data")){
+  # Load into memory
+  fraud_data <- read.csv(file = 'data/creditcard.csv')
+}
+```
+
+\newpage
+# Introduction
+For obvious reasons is very important being able to recognize a fraud transactions from a legitimate one, these reasons varies from customer experience to billions of dollars in losses caused by fraudulent transactions therefore is of vital importance the development of algorithms which allows to detect and prevent this losses. These algorithms are challenging mainly because of their highly unbalanced data, as we have very few fraud identified cases against the no fraud transactions. At the same time is important to maintain anonymity as a dataset with for this purpose will deal with sensitive data.
+
+The dataset contains transactions made by credit cards in September 2013 by European cardholders.
+This dataset presents transactions that occurred in two days, where we have 492 frauds out of 284,807 transactions. The dataset is highly unbalanced, the positive class (frauds) account for 0.172% of all transactions.
+
+It contains only numerical input variables which are the result of a PCA transformation. Unfortunately, due to confidentiality issues, we cannot provide the original features and more background information about the data. Features V1, V2, … V28 are the principal components obtained with PCA, the only features which have not been transformed with PCA are 'Time' and 'Amount'. Feature 'Time' contains the seconds elapsed between each transaction and the first transaction in the dataset. The feature 'Amount' is the transaction Amount, this feature can be used for example-dependant cost-sensitive learning. Feature 'Class' is the response variable and it takes value 1 in case of fraud and 0 otherwise.
+
+\newpage
+# Data Exploratory Analysis
+As explained in the introduction, the dataset contains several features already selected from PCA analysis. Now we will review these features to look up for NA values, big values and correlated data.
+
+To get a glance of the information we may see a few lines of the dataset, the dataset contains 284,807 observations, with 30 features, 28 features consist in PCA features, plus 2 more, time and amount. On the table below we just put the first and last features for visual purposes. It is important to note that the PCA features are possible the merge of two or more previous features which may have similar behavior and now are condensed in one unique feature.
+``` {r check_first_lines,}
+head(fraud_data[c(0,1,2,3,28,29,30,31)]) %>%
+  kable(caption = "First six rows of the fraud dataset", 
+        booktabs = T, 
+        format = "latex", 
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("scale_down", "hold_position"), bootstrap_options =  c("striped", "hover", "condensed"))
+
+# Check Class type
+# class(fraud_data$Class)  # Is integer
+fraud_data$Class <- as.factor(fraud_data$Class)
+# class(fraud_data$Class)  # Is factor
+
+```
+
+## NA Values and sparse data
+Now we will display the number of observations and how many of them are Fraud (class 1) and no Fraud
+``` {r no_obs,}
+fraud_data %>% count() %>%
+  kable(caption = "No of Observations", 
+        booktabs = T, 
+        format = "latex",
+        col.names = "Count",
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+
+fraud_data %>% group_by(Class) %>%count() %>%
+  kable(caption = "Unbalanced data", 
+        booktabs = T, 
+        format = "latex",
+        col.names = c("Class","Number"),
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+
+```
+
+Also we can see if the number of values which are NA and if any of the amount values are negative (which make no sense in our context) 
+``` {r NA_values,}
+# Check na in the data set
+no_na <- sum(is.na(fraud_data))
+
+# Check amount column if has negative values
+no_negative <- sum(fraud_data$Amount < 0)
+
+data.frame(Concept = c("Number of NA values", "Amount negative values"),
+           Count = c(no_na, no_negative)) %>%
+  kable(caption = "NA/Negative Values", 
+        booktabs = T, 
+        format = "latex",
+        col.names = c("Concept","Count"),
+        linesep = "") %>%
+  kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+
+```
+
+With respect to the PCA features we will explore they distribution and we can how they are not very sparse having values between -20 and 20.
+```{r features_distribution,  echo=FALSE, warning=FALSE, fig.pos= "H", fig.cap= "Features Distribution"}
+# For time sake, we will use only 10,000 obs to have and idea of the data
+sample <- fraud_data[1:10000,]
+# Checking all but time values
+ggplot(stack(sample[,-c(1,30, 31)]), aes(ind, values)) + 
+  geom_boxplot(color = "black", fill = I("deepskyblue4")) +
+  labs(
+    x = "Feature",
+    y = "Value")
+```
+
+## Time Values
+Times values are and special case on this dataset as only represents the time between the first transaction and the current observation, therefore only by this description we can infer there is no use to use it, but just in case we explore the data.
+```{r time_distribution,  echo=FALSE, warning=FALSE, fig.pos= "H", fig.cap= "Time Distribution"}
+fraud_data %>%
+  ggplot(aes(Time)) +
+  geom_histogram(bins = 100, color = "black", fill = I("deepskyblue4")) + 
+  labs(
+     x = "Time (Seconds since the first transaction in the dataset)",
+     y = "Count")
+```
+
+```{r timeClass_distribution,  echo=FALSE, warning=FALSE,  fig.pos= "H", fig.cap= "Time/Class Distribution"}
+fraud_data %>%
+  ggplot(aes(x = Time, fill = factor(Class))) + geom_histogram(bins = 100)+
+  labs(x = 'Time in seconds since first transaction', y = 'Number of transactions', fill = 'Class') +
+  ggtitle('Distribution of time of transaction by class') +
+  facet_grid(Class ~ ., scales = 'free_y')
+
+```
+We can see here how the normal trasactions are made wihtin a given seasonality, while the fraud transactions seems to be more regular. Therefore we will keep the feature to use this seasonlaity.
+
+## Amount Values
+Similar to the time values we can see transaction amount distribution in general and grouped by class
+
+```{r amount_distribution,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "Amount Distribution"}
+# Checking Amount values
+fraud_data %>%
+  ggplot(aes(Amount)) +
+  geom_histogram(binwidth = 10, color = "black", fill = I("deepskyblue4")) + 
+  labs(
+    x = "Amount (Dollars for trasaction)",
+    y = "Count") +
+  xlim(-101,1000)
+
+```
+
+```{r amountClass_distribution,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "Amount Distribution by Class"}
+# Visualization of Amount values
+fraud_data %>%
+  ggplot(aes(x = Amount, fill = factor(Class))) + geom_histogram(binwidth = 5)+
+  labs(x = 'Amount transaction', y = 'Number of transactions', fill = 'Class') +
+  ggtitle('Distribution of transaction amount by class') +
+  facet_grid(Class ~ ., scales = 'free_y') + 
+  xlim(-101,500)
+```
+
+We see most of the transactions are of a small value, mainly for the fraud class, with some little higher amounts (around $200) on the no-fraud class.
+
+
+## Features Correlation
+Other interesting feature analysis we can try is to find the correlations between each feature to see if we can omit one of them. Another interesting visualization is to use tSNE (t-Distributed Stochastic Neighbor Embedding) which reduces the features space to 3 or 2 dimension (2D in our case) to see if is feasible to to distinguish one class from another using the parameters given.
+
+```{r correlationPlot,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "Correlation Plot"}
+# Correlations plot
+correlations <- cor(fraud_data[,-which(names(fraud_data) %in% c("Class"))], method="pearson")
+corrplot(correlations, number.cex = .9, method = "circle", type = "full", tl.cex=0.8,tl.col = "black")
+```
+So, as expected (As this features are PCA features) we see there is technically no correlation between different variables, just a little one between V3-Time and V3-Amount.
+
+```{r tSNE_Plot,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "t-SNE Plot"}
+# Correlations plot
+# We will not use the entire dataset as it is very time expensive
+tsne_subset <- 1:as.integer(0.1*nrow(fraud_data))
+tsne <- Rtsne(fraud_data[tsne_subset,-c(1, 31)], perplexity = 20, theta = 0.5, pca = F, verbose = F, max_iter = 500, check_duplicates = F)
+
+# We define our classes to see Fraud  and No Fraud instead of 1 and 0
+classes <- if_else(fraud_data$Class[tsne_subset] == 0, "No fraud", "Fraud")
+tsne_mat <- as.data.frame(tsne$Y)
+ggplot(tsne_mat, aes(x = V1, y = V2)) + 
+  geom_point(aes(color = classes)) + 
+  theme_minimal() + 
+  ggtitle("t-SNE visualisation of transactions") + 
+  scale_color_manual(values = c("#CA160A", "#439DEC"))
+```
+Here we see on the axis V1 and V2, but they are not the original V1 and V2 from our fraud data, these are the parameters resulting from the incorporation of all variables for this analysis. We also can see the red dots corresponding to the fraud transactions, lucky for us, they seem to be on the border of the no fraud transactions, meaning that is less complicated to extract a model to find the fraud transaction.
+
+\newpage
+# Model Development
+
+As we saw previously, we have a very unbalanced data. We can tackle this from to point of views, one of them will be to reduce the no-fraud data to be similar to the fraud cases. This make no sense for us, as if we do this we will be using less than 1 thousand cases to train our model.
+
+Is for this that we will use the oposite approach, meaning that we will upsample our fraud data to be similar to the no fraud cases.
+
+## Data Splitting
+
+We will split our data in two parts, the first of them will be our training data, which we will later augment to have a similar number of cases in fraud and in no-fraud. The proportion decided for this is going to be of 80% for training and 20% for testing, note that in testing we will not augment the fraud cases, we will test just as the data came from. This proportion is to have at least some cases to test the detection for the fraud cases in our test data, because if we have less data than that in our test dataset we will have very few cases.
+
+## Measure metrics
+On this highly unbalance data we cannot use the typically accuracy metric, as this metric is of the form:
+$$acc = \frac{(TP + TN}{Total)}$$
+Where TP are True Positives; TN are  True Negatives; and Total the total observations
+
+So we can have a lot o True Positives with a lot false Positives and this will not appear in our score, so we will use another metrics which use recall to measure of model.
+
+Other option to use is to use F1 score as it mix True and False Negative rates.
+$$F1_score =  \frac{2*Precision * Recall}{Precision+Recall}$$
+
+Another option also is to use the ROC - Area Under Curve which uses the True Positive Rate against the False Positive Rate to obtain its value
+
+Just as a reminder the Recall and Precision formulas:
+$$Precision = \frac{TP}{TP + FP}$$
+$$Recall = \frac{TP}{TP + FN}$$
+
+We will try all of these metrics on the following steps and find which is the more descriptive way to measure our model.
+
+## Upsample method
+As commented previously we will upsample the fraud cases in our training data to improve the performance in our model training. The method that we will use is the SMOTE method (Synthetic Minority Oversampling Technique).
+
+SMOTE works by selecting examples that are close in the feature space, drawing a line between the examples in the feature space and drawing a new sample at a point along that line.
+
+Specifically, a random example from the minority class is first chosen. Then k of the nearest neighbors for that example are found (typically k=5). A randomly selected neighbor is chosen and a synthetic example is created at a randomly selected point between the two examples in feature space.
+
+This procedure can be used to create as many synthetic examples for the minority class as are required. In the paper, it suggests first using random undersampling to trim the number of examples in the majority class, then use SMOTE to oversample the minority class to balance the class distribution. But in this case we will go directly to upsample the minority class.
+
+You can read more about this on [SMOTE: Synthetic Minority Over-sampling Technique]( https://arxiv.org/abs/1106.1813)
+
+## Models
+
+We will start with the design of three dummy models to test our model metrics and also to get a starting point, after this we will proceed developing 4 more models using Classification and Regression Trees (CART), Random Forest and Gradient Boosting (XGBoost). So summarizing we will use:
+* Dummy models. Test metrics and set starting point.
+* CART models. Single Tree using unbalances and balanced data using SMOTE.
+* Random Forest Model. Using SMOTE.
+* XGBoost Model. Two models using XGBoost, one of them using all the parameters the other using top 7 parameters.
+
+### Dummy models
+
+We will try 3 dummy models in order to test our metrics, accuracy, F1 score and ROC-AUC, and to use as comparing point for the following models.
+
+Our dummy attempts will consist in 3 types off prediction:
+
+1.    **Random**: Choose randomly between 1 and zero to predict our class.
+2.    **No-fraud**: Choose always 0, do not make any prediction at all, as fraud cases are very small we can say is never fraud and still make a good prediction.
+3.    **Dummy statistic**: Based on the probability between fraud and no fraud, chose one of them based on their occurrence i.e. i if relationship is 10 to 1 predict 10 to 1 occurrence of the class.
+
+### CART
+The representation for the CART model is a binary tree.
+
+This is your binary tree from algorithms and data structures, nothing too fancy. Each root node represents a single input variable (x) and a split point on that variable (assuming the variable is numeric).
+
+The leaf nodes of the tree contain an output variable (y) which is used to make a prediction.
+
+For example, in the titanic surivival analysis, the classification tree will be as follows.
+
+![Titanic Binary Decision Tree](./img/Decision_Tree.jpg) 
+
+"sibsp" is the number of spouses or siblings aboard. The figures under the leaves show the probability of survival and the percentage of observations in the leaf. Summarizing: Your chances of survival were good if you were (i) a female or (ii) a male younger than 9.5 years with strictly less than 3 siblings.
+
+Our case is similar but instead off having 3 parameters (gender, age and sibsp), we have 30. Crazy eh!
+
+### Random Forest
+Random forest, like its name implies, consists of a large number of individual decision trees that operate as an ensemble. Each individual tree in the random forest spits out a class prediction and the class with the most votes becomes our model’s prediction.
+
+The fundamental concept behind random forest is a simple but powerful one — the wisdom of crowds. In data science speak, the reason that the random forest model works so well is:
+A large number of relatively uncorrelated models (trees) operating as a committee will outperform any of the individual constituent models.
+
+### XGBoost
+XGBoost stands for “Extreme Gradient Boosting”, where the term “Gradient Boosting” originates from the paper Greedy Function Approximation: A Gradient Boosting Machine, by Friedman.
+
+XGBoost is used for supervised learning problems, where we use the training data (with multiple features) to predict a target variable. 
+
+XGBoost minimizes a regularized objective function (L1 and L2) that combines a convex loss function (based on the difference between the expected and target outputs) and a penalty term for the complexity of the model (in other words, the functions of the tree of regression). Training continues iteratively, adding new trees that predict the residuals or errors from previous trees that are then combined with previous trees to make the final prediction. It is called gradient augmentation because it uses a gradient descent algorithm to minimize loss when adding new models.
+
+\newpage
+
+\newpage
+# Results
+Following we will present the results obtained from the procedures described above and table sumarizing the results for each one of the models used.
+
+## SMOTE Upsampling
+As a recap, we saw on table 3 that for the Fraud class we only had 492 cases in all our data set. We perform the data split and get the next results.
+
+``` {r data_split,}
+# Getting our 5 test samples
+set.seed(2021)
+index <- createDataPartition(y = fraud_data$Class, p = .8, list = FALSE)
+
+train_data <- fraud_data[index,]
+test_data <- fraud_data[-index,]
+
+train_data %>% group_by(Class) %>%count() %>%
+  kable(caption = "Train Unbalanced Data", 
+        booktabs = T, 
+        format = "latex",
+        col.names = c("Class","Count"),
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+
+# Applying SMOTE
+train <- SMOTE(train_data[,-which(names(train_data) %in% c("Class"))],
+              train_data[,which(names(train_data) %in% c("Class"))])
+train <- train$data
+
+train %>% group_by(class) %>%count() %>%
+  kable(caption = "Train Balanced Data", 
+        booktabs = T, 
+        format = "latex",
+        col.names = c("Class","Count"),
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+```
+With this, we can see that our upsampling technique seem to work, now it is time to check our metrics and if this upsample represents a benefit for the model training.
+
+
+## Metrics Evaluation and Dummy Attempts
+Now we will test our dummies attempts. We will show the ROC curves for each one of the models and a final table comparing each of the metrics.
+
+```{r random_attempt,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for random attempt"}
+size <- length(test_data$Class)
+
+# Randomly set
+y_hat_random <- sample(c(0:1), size = size, replace = TRUE)
+random_acc <-  accuracy(test_data$Class, y_hat_random)
+random_roc <- ROSE::roc.curve(test_data$Class, y_hat_random, plotit = TRUE)
+random_roc_val <- random_roc$auc
+random_f1 <- F_meas(data = as.factor(y_hat_random), reference = test_data$Class)
+```
+```{r noFraud_attempt,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for no-Fraud attempt"}
+size <- length(test_data$Class)
+
+# We set all prediction as no Fraud
+y_hat_noFraud <- as.integer(replicate(0, n = size))
+noFraud_acc <-  accuracy(test_data$Class, y_hat_noFraud)
+noFraud_roc <- ROSE::roc.curve(test_data$Class, y_hat_noFraud, plotit = TRUE)
+noFraud_roc_val <- noFraud_roc$auc
+
+# We need to set at least one value to be diferent for F1 score
+y_hat_noFraud[1] <- 1
+noFraud_f1 <- F_meas(data = as.factor(y_hat_noFraud), reference = test_data$Class)
+```
+```{r dummyStatistic_attempt,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for statistic attempt"}
+size <- length(test_data$Class)
+
+# We get original proportion of Fraud over no Fraud
+counts <- train_data %>% group_by(Class) %>% count()
+noFraudC <- counts$n[1]
+fraudC <- counts$n[2]
+relationship <- fraudC / (fraudC + noFraudC)
+y_hat_statistic <- sample(c(0,1), size = size, replace = TRUE, prob = c(1-relationship,relationship))
+
+statistic_acc <-  accuracy(test_data$Class, y_hat_statistic)
+statistic_roc <- ROSE::roc.curve(test_data$Class, y_hat_statistic, plotit = TRUE)
+statistic_roc_val <- statistic_roc$auc
+statistic_f1 <- F_meas(data = as.factor(y_hat_statistic), reference = test_data$Class)
+```
+Finally we will show the results obtained from the previous attempts.
+
+``` {r dummy_compare,}
+data.frame(Attempt = c("Random Choice","No-Fraud","Statistic"),
+           Accuracy = c(random_acc, noFraud_acc, statistic_acc),
+           F1_Score = c(random_f1, noFraud_f1, statistic_f1),
+           AUC_Value = c(random_roc_val, noFraud_roc_val, statistic_roc_val)
+           ) %>%
+  kable(caption = "Dummy Attempts Summary", 
+        booktabs = T, 
+        format = "latex",
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+```
+On the above table we can see how AUC gives a better look of how to measure our models as F1 Score and Accuracy do not give a correct metric of how well our model is performing when clearly we are using a bad prediction model. 
+
+For this reason we will further use ROC-AUC as our metric for the next models.
+
+## CART results
+Now we show the result obtained using a CART models, the first of them will use the unbalanced data and the second model will use the balanced dataset.
+```{r CART_unbalanced,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for UNBALANCED data CART"}
+CART_noSm_fit <- rpart(Class ~ ., data = train_data)
+
+#Evaluate model performance on test set
+CART_noSm_pred <- predict(CART_noSm_fit, newdata = test_data, method = "Class")
+
+CART_noSM_roc <- ROSE::roc.curve(test_data$Class, CART_noSm_pred[,2], plotit = TRUE)
+CART_noSM_roc_val <- CART_noSM_roc$auc
+```
+
+```{r CART_balanced,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for BALANCED data CART"}
+CART_Sm_fit <- rpart(class ~ ., data = train)
+
+#Evaluate model performance on test set
+CART_Sm_pred <- predict(CART_Sm_fit, newdata = test_data, method = "Class")
+
+CART_SM_roc <- ROSE::roc.curve(test_data$Class, CART_Sm_pred[,2], plotit = TRUE)
+CART_SM_roc_val <- CART_SM_roc$auc
+```
+
+Now that we have the ROC curves obtained we can now see if our prediction is better with the SMOTE upsample data or not. And it is, as its show in the below table.
+
+``` {r CART_compare,}
+
+data.frame(Data = c("Unbalanced Fraud cases", "Balanced Fraud Cases"),
+           AUC_Value = c(CART_noSM_roc_val, CART_SM_roc_val)
+           ) %>%
+  kable(caption = "Balanced vs Unbalanced train data", 
+        booktabs = T, 
+        format = "latex",
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+```
+
+## Random Forest
+Now take a look using a Random Forest Approach
+```{r Random_Forest,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for Random Forest"}
+x <- train[,-which(names(train) %in% c("class"))]
+y <- as.factor(train$class)
+rf_fit <- Rborist(x, y, ntree = 1000, minNode = 20, maxLeaf = 13)
+
+rf_pred <- predict(rf_fit, test_data[,-which(names(test_data) %in% c("Class"))], ctgCensus = "prob")
+rf_prob <- rf_pred$prob
+
+rf_roc <- ROSE::roc.curve(test_data$Class, rf_prob[,2], plotit = TRUE)
+rf_roc_val <- rf_roc$auc
+```
+
+This looks pretty great, and we have an Area under the Curve of: `r rf_roc_val`
+
+## XGBoost results
+Now its time to hit our last models, we will see if XGBoost can outperform what random forest did
+```{r xgboost_all,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve for XGBoost"}
+xgb <- xgboost::xgboost(data = data.matrix(train[,-which(names(train) %in% c("class"))]), 
+               label = as.numeric(train[,which(names(train) %in% c("class"))]),
+               eta = 0.1,
+               gamma = 0.1,
+               max_depth = 10, 
+               nrounds = 300,
+               objective = "binary:logistic",
+               colsample_bytree = 0.6,
+               verbose = 0,
+               nthread = 7,
+               eval_metric='logloss')
+
+xgb_pred <- predict(xgb, data.matrix(test_data[,-which(names(test_data) %in% c("Class"))]))
+
+xgb_roc <- ROSE::roc.curve(test_data$Class, xgb_pred, plotit = TRUE)
+xgb_roc_val <- xgb_roc$auc
+```
+With a AUC value of: `r xgb_roc_val`
+
+Now take a look to the top 10 feature for this classifier
+```{r importance_plot,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "XGBoost, most important features"}
+# Importance plot
+names <- dimnames(data.matrix(train[,-which(names(train) %in% c("class"))]))[[2]]
+
+# Compute feature importance matrix
+importance_matrix <- xgboost::xgb.importance(names, model = xgb)
+
+# Nice graph
+xgboost::xgb.plot.importance(importance_matrix[1:10,]) 
+```
+Now take a look to what happen if we only chose the top 7 features
+```{r xgboost_top7,  echo=FALSE, warning=FALSE, fig.pos="H", fig.cap= "ROC Curve, for XGBoost with top 7 features"}
+# Train with only top 7 variables
+train_t7 <- train[,which(names(train) %in% importance_matrix$Feature[1:7])]
+xgb_t7 <- xgboost::xgboost(data = data.matrix(train_t7), 
+                        label = as.numeric(train$class),
+                        eta = 0.1,
+                        gamma = 0.1,
+                        max_depth = 10, 
+                        nrounds = 300,
+                        objective = "binary:logistic",
+                        colsample_bytree = 0.6,
+                        verbose = 0,
+                        nthread = 7,
+                        eval_metric='logloss')
+
+xgb_pred_t7 <- predict(xgb_t7,data.matrix(test_data[,which(names(test_data) %in% importance_matrix$Feature[1:7])]))
+
+xgb_roc_t7 <- ROSE::roc.curve(test_data$Class, xgb_pred_t7, plotit = TRUE)
+xgb_roc_val_t7 <- xgb_roc_t7$auc
+```
+With a final AUC: `r xgb_roc_val_t7`. Which is not as good as using all the features, but still a good try.
+
+## Sumarize
+ Just to add up everything we made so far, lets summarize it on a final table.
+ 
+``` {r compare_models(),}
+results <- data.frame(Method = c("Random","noFraud","Dummy Statistics",
+                                 "CART no Balance Data","CART Balanced Data","Random Forest","XGBoost","XGBoost top 7"),
+                      AUC=c(random_roc_val,noFraud_roc_val, statistic_roc_val,
+                                  CART_noSM_roc_val, CART_SM_roc_val, rf_roc_val, xgb_roc_val, xgb_roc_val_t7))
+
+results %>%
+  kable(caption = "Model Comparison", 
+        booktabs = T, 
+        format = "latex",
+        col.names = c("Model","AUC Value"),
+        linesep = "") %>%
+ kable_styling(full_width = FALSE, position = "center", font_size = 10, latex_options = c("hold_position"))
+```
+\newpage
+# Conclussions
+With this we finalize this project and we can see how XGBoost using all the variables outperform all other methods, but the top 7 features not laying so far from there, even when random forest did a great job.
+
+Hopefully this project can give some insight about how to make the exploratory analysis, deal with unbalanced data, the metrics used for this, how to upsample the minority class to improve your training and also, we saw several algorithms to make a classification of the given data, this will help us in the future how to chose one of them considering the trade off between performance, time and the features the data has.
+
+\newpage
+# References
+Thanks to all the people who made this possible, writing articles or papers over this topic or making the dataset available: 
+
+* Andrea Dal Pozzolo, Olivier Caelen, Reid A. Johnson and Gianluca Bontempi. Calibrating Probability with Undersampling for Unbalanced Classification. In Symposium on Computational Intelligence and Data Mining (CIDM), IEEE, 2015
+* Dal Pozzolo, Andrea; Caelen, Olivier; Le Borgne, Yann-Ael; Waterschoot, Serge; Bontempi, Gianluca. Learned lessons in credit card fraud detection from a practitioner perspective, Expert systems with applications,41,10,4915-4928,2014, Pergamon
+* Dal Pozzolo, Andrea; Boracchi, Giacomo; Caelen, Olivier; Alippi, Cesare; Bontempi, Gianluca. Credit card fraud detection: a realistic modeling and a novel learning strategy, IEEE transactions on neural networks and learning systems,29,8,3784-3797,2018,IEEE
+* Dal Pozzolo, Andrea Adaptive Machine learning for credit card fraud detection ULB MLG PhD thesis (supervised by G. Bontempi)
+* Carcillo, Fabrizio; Dal Pozzolo, Andrea; Le Borgne, Yann-Aël; Caelen, Olivier; Mazzer, Yannis; Bontempi, Gianluca. Scarff: a scalable framework for streaming credit card fraud detection with Spark, Information fusion,41, 182-194,2018,Elsevier
+* Carcillo, Fabrizio; Le Borgne, Yann-Aël; Caelen, Olivier; Bontempi, Gianluca. Streaming active learning strategies for real-life credit card fraud detection: assessment and visualization, International Journal of Data Science and Analytics, 5,4,285-300,2018,Springer International Publishing
+* Bertrand Lebichot, Yann-Aël Le Borgne, Liyun He, Frederic Oblé, Gianluca Bontempi Deep-Learning Domain Adaptation Techniques for Credit Cards Fraud Detection, INNSBDDL 2019: Recent Advances in Big Data and Deep Learning, pp 78-88, 2019
+* Fabrizio Carcillo, Yann-Aël Le Borgne, Olivier Caelen, Frederic Oblé, Gianluca Bontempi Combining Unsupervised and Supervised Learning in Credit Card Fraud Detection Information Sciences, 2019
+* Yann-Aël Le Borgne, Gianluca Bontempi Machine Learning for Credit Card Fraud Detection - Practical Handbook
+* Chawla, N. V., Bowyer, K. W., Hall, L. O., & Kegelmeyer, W. P. (2002). SMOTE: synthetic minority over-sampling technique. Journal of artificial intelligence research, 16, 321-357.[SMOTE: Synthetic Minority Over-sampling Technique](https://arxiv.org/abs/1106.1813)
+* Atharva Ingle, [Credit Card Fraud Detection with R + (sampling)](https://www.kaggle.com/atharvaingle/credit-card-fraud-detection-with-r-sampling)
+* Jason Brownlee [SMOTE for Imbalanced Classification with Python](https://machinelearningmastery.com/smote-oversampling-for-imbalanced-classification/)
+* Jason Brownlee, [Classification And Regression Trees for Machine Learning](https://machinelearningmastery.com/classification-and-regression-trees-for-machine-learning/)
+* Tony Yiu, [Understanding Random Forest](https://towardsdatascience.com/understanding-random-forest-58381e0602d2)
+* [Gentle Introduction of XGBoost Library](https://sitiobigdata.com/2019/01/20/gentle-introduction-of-xgboost-library/#)

@@ -1,0 +1,847 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{lmodern}
+\usepackage{amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+  \usepackage{amssymb}
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  pdftitle={Fraud Detection},
+  pdfauthor={Agustin Gallo Fernandez},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{5}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{xcolor}
+\ifluatex
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+
+\title{\textbf{Fraud Detection}}
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{HarvardX PH125.9X - Data Science Capston pt.~II}
+\author{\textbf{Agustin Gallo Fernandez}}
+\date{4/7/2021}
+
+\begin{document}
+\maketitle
+
+\newpage{}
+
+{
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+\newpage
+
+\hypertarget{introduction}{%
+\section{Introduction}\label{introduction}}
+
+For obvious reasons is very important being able to recognize a fraud
+transactions from a legitimate one, these reasons varies from customer
+experience to billions of dollars in losses caused by fraudulent
+transactions therefore is of vital importance the development of
+algorithms which allows to detect and prevent this losses. These
+algorithms are challenging mainly because of their highly unbalanced
+data, as we have very few fraud identified cases against the no fraud
+transactions. At the same time is important to maintain anonymity as a
+dataset with for this purpose will deal with sensitive data.
+
+The dataset contains transactions made by credit cards in September 2013
+by European cardholders. This dataset presents transactions that
+occurred in two days, where we have 492 frauds out of 284,807
+transactions. The dataset is highly unbalanced, the positive class
+(frauds) account for 0.172\% of all transactions.
+
+It contains only numerical input variables which are the result of a PCA
+transformation. Unfortunately, due to confidentiality issues, we cannot
+provide the original features and more background information about the
+data. Features V1, V2, \ldots{} V28 are the principal components
+obtained with PCA, the only features which have not been transformed
+with PCA are `Time' and `Amount'. Feature `Time' contains the seconds
+elapsed between each transaction and the first transaction in the
+dataset. The feature `Amount' is the transaction Amount, this feature
+can be used for example-dependant cost-sensitive learning. Feature
+`Class' is the response variable and it takes value 1 in case of fraud
+and 0 otherwise.
+
+\newpage
+
+\hypertarget{data-exploratory-analysis}{%
+\section{Data Exploratory Analysis}\label{data-exploratory-analysis}}
+
+As explained in the introduction, the dataset contains several features
+already selected from PCA analysis. Now we will review these features to
+look up for NA values, big values and correlated data.
+
+To get a glance of the information we may see a few lines of the
+dataset, the dataset contains 284,807 observations, with 30 features, 28
+features consist in PCA features, plus 2 more, time and amount. On the
+table below we just put the first and last features for visual purposes.
+It is important to note that the PCA features are possible the merge of
+two or more previous features which may have similar behavior and now
+are condensed in one unique feature.
+
+\begin{table}[!h]
+
+\caption{\label{tab:check_first_lines}First six rows of the fraud dataset}
+\centering
+\resizebox{\linewidth}{!}{
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{rrrrrrr}
+\toprule
+Time & V1 & V2 & V27 & V28 & Amount & Class\\
+\midrule
+0 & -1.3598071 & -0.0727812 & 0.1335584 & -0.0210531 & 149.62 & 0\\
+0 & 1.1918571 & 0.2661507 & -0.0089831 & 0.0147242 & 2.69 & 0\\
+1 & -1.3583541 & -1.3401631 & -0.0553528 & -0.0597518 & 378.66 & 0\\
+1 & -0.9662717 & -0.1852260 & 0.0627228 & 0.0614576 & 123.50 & 0\\
+2 & -1.1582331 & 0.8777368 & 0.2194222 & 0.2151531 & 69.99 & 0\\
+2 & -0.4259659 & 0.9605230 & 0.2538442 & 0.0810803 & 3.67 & 0\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\hypertarget{na-values-and-sparse-data}{%
+\subsection{NA Values and sparse data}\label{na-values-and-sparse-data}}
+
+Now we will display the number of observations and how many of them are
+Fraud (class 1) and no Fraud
+
+\begin{table}[!h]
+
+\caption{\label{tab:no_obs}No of Observations}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{r}
+\toprule
+Count\\
+\midrule
+284807\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!h]
+
+\caption{\label{tab:no_obs}Unbalanced data}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{rr}
+\toprule
+Class & Number\\
+\midrule
+0 & 284315\\
+1 & 492\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Also we can see if the number of values which are NA and if any of the
+amount values are negative (which make no sense in our context)
+
+\begin{table}[!h]
+
+\caption{\label{tab:NA_values}NA/Negative Values}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{lr}
+\toprule
+Concept & Count\\
+\midrule
+Number of NA values & 0\\
+Amount negative values & 0\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With respect to the PCA features we will explore they distribution and
+we can how they are not very sparse having values between -20 and 20.
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/features_distribution-1} 
+
+}
+
+\caption{Features Distribution}\label{fig:features_distribution}
+\end{figure}
+
+\hypertarget{time-values}{%
+\subsection{Time Values}\label{time-values}}
+
+Times values are and special case on this dataset as only represents the
+time between the first transaction and the current observation,
+therefore only by this description we can infer there is no use to use
+it, but just in case we explore the data.
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/time_distribution-1} 
+
+}
+
+\caption{Time Distribution}\label{fig:time_distribution}
+\end{figure}
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/timeClass_distribution-1} 
+
+}
+
+\caption{Time/Class Distribution}\label{fig:timeClass_distribution}
+\end{figure}
+
+We can see here how the normal trasactions are made wihtin a given
+seasonality, while the fraud transactions seems to be more regular.
+Therefore we will keep the feature to use this seasonlaity.
+
+\hypertarget{amount-values}{%
+\subsection{Amount Values}\label{amount-values}}
+
+Similar to the time values we can see transaction amount distribution in
+general and grouped by class
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/amount_distribution-1} 
+
+}
+
+\caption{Amount Distribution}\label{fig:amount_distribution}
+\end{figure}
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/amountClass_distribution-1} 
+
+}
+
+\caption{Amount Distribution by Class}\label{fig:amountClass_distribution}
+\end{figure}
+
+We see most of the transactions are of a small value, mainly for the
+fraud class, with some little higher amounts (around \$200) on the
+no-fraud class.
+
+\hypertarget{features-correlation}{%
+\subsection{Features Correlation}\label{features-correlation}}
+
+Other interesting feature analysis we can try is to find the
+correlations between each feature to see if we can omit one of them.
+Another interesting visualization is to use tSNE (t-Distributed
+Stochastic Neighbor Embedding) which reduces the features space to 3 or
+2 dimension (2D in our case) to see if is feasible to to distinguish one
+class from another using the parameters given.
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/correlationPlot-1} 
+
+}
+
+\caption{Correlation Plot}\label{fig:correlationPlot}
+\end{figure}
+
+So, as expected (As this features are PCA features) we see there is
+technically no correlation between different variables, just a little
+one between V3-Time and V3-Amount.
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/tSNE_Plot-1} 
+
+}
+
+\caption{t-SNE Plot}\label{fig:tSNE_Plot}
+\end{figure}
+
+Here we see on the axis V1 and V2, but they are not the original V1 and
+V2 from our fraud data, these are the parameters resulting from the
+incorporation of all variables for this analysis. We also can see the
+red dots corresponding to the fraud transactions, lucky for us, they
+seem to be on the border of the no fraud transactions, meaning that is
+less complicated to extract a model to find the fraud transaction.
+
+\newpage
+
+\hypertarget{model-development}{%
+\section{Model Development}\label{model-development}}
+
+As we saw previously, we have a very unbalanced data. We can tackle this
+from to point of views, one of them will be to reduce the no-fraud data
+to be similar to the fraud cases. This make no sense for us, as if we do
+this we will be using less than 1 thousand cases to train our model.
+
+Is for this that we will use the oposite approach, meaning that we will
+upsample our fraud data to be similar to the no fraud cases.
+
+\hypertarget{data-splitting}{%
+\subsection{Data Splitting}\label{data-splitting}}
+
+We will split our data in two parts, the first of them will be our
+training data, which we will later augment to have a similar number of
+cases in fraud and in no-fraud. The proportion decided for this is going
+to be of 80\% for training and 20\% for testing, note that in testing we
+will not augment the fraud cases, we will test just as the data came
+from. This proportion is to have at least some cases to test the
+detection for the fraud cases in our test data, because if we have less
+data than that in our test dataset we will have very few cases.
+
+\hypertarget{measure-metrics}{%
+\subsection{Measure metrics}\label{measure-metrics}}
+
+On this highly unbalance data we cannot use the typically accuracy
+metric, as this metric is of the form: \[acc = \frac{(TP + TN}{Total)}\]
+Where TP are True Positives; TN are True Negatives; and Total the total
+observations
+
+So we can have a lot o True Positives with a lot false Positives and
+this will not appear in our score, so we will use another metrics which
+use recall to measure of model.
+
+Other option to use is to use F1 score as it mix True and False Negative
+rates. \[F1_score =  \frac{2*Precision * Recall}{Precision+Recall}\]
+
+Another option also is to use the ROC - Area Under Curve which uses the
+True Positive Rate against the False Positive Rate to obtain its value
+
+Just as a reminder the Recall and Precision formulas:
+\[Precision = \frac{TP}{TP + FP}\] \[Recall = \frac{TP}{TP + FN}\]
+
+We will try all of these metrics on the following steps and find which
+is the more descriptive way to measure our model.
+
+\hypertarget{upsample-method}{%
+\subsection{Upsample method}\label{upsample-method}}
+
+As commented previously we will upsample the fraud cases in our training
+data to improve the performance in our model training. The method that
+we will use is the SMOTE method (Synthetic Minority Oversampling
+Technique).
+
+SMOTE works by selecting examples that are close in the feature space,
+drawing a line between the examples in the feature space and drawing a
+new sample at a point along that line.
+
+Specifically, a random example from the minority class is first chosen.
+Then k of the nearest neighbors for that example are found (typically
+k=5). A randomly selected neighbor is chosen and a synthetic example is
+created at a randomly selected point between the two examples in feature
+space.
+
+This procedure can be used to create as many synthetic examples for the
+minority class as are required. In the paper, it suggests first using
+random undersampling to trim the number of examples in the majority
+class, then use SMOTE to oversample the minority class to balance the
+class distribution. But in this case we will go directly to upsample the
+minority class.
+
+You can read more about this on
+\href{https://arxiv.org/abs/1106.1813}{SMOTE: Synthetic Minority
+Over-sampling Technique}
+
+\hypertarget{models}{%
+\subsection{Models}\label{models}}
+
+We will start with the design of three dummy models to test our model
+metrics and also to get a starting point, after this we will proceed
+developing 4 more models using Classification and Regression Trees
+(CART), Random Forest and Gradient Boosting (XGBoost). So summarizing we
+will use: * Dummy models. Test metrics and set starting point. * CART
+models. Single Tree using unbalances and balanced data using SMOTE. *
+Random Forest Model. Using SMOTE. * XGBoost Model. Two models using
+XGBoost, one of them using all the parameters the other using top 7
+parameters.
+
+\hypertarget{dummy-models}{%
+\subsubsection{Dummy models}\label{dummy-models}}
+
+We will try 3 dummy models in order to test our metrics, accuracy, F1
+score and ROC-AUC, and to use as comparing point for the following
+models.
+
+Our dummy attempts will consist in 3 types off prediction:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  \textbf{Random}: Choose randomly between 1 and zero to predict our
+  class.
+\item
+  \textbf{No-fraud}: Choose always 0, do not make any prediction at all,
+  as fraud cases are very small we can say is never fraud and still make
+  a good prediction.
+\item
+  \textbf{Dummy statistic}: Based on the probability between fraud and
+  no fraud, chose one of them based on their occurrence i.e.~i if
+  relationship is 10 to 1 predict 10 to 1 occurrence of the class.
+\end{enumerate}
+
+\hypertarget{cart}{%
+\subsubsection{CART}\label{cart}}
+
+The representation for the CART model is a binary tree.
+
+This is your binary tree from algorithms and data structures, nothing
+too fancy. Each root node represents a single input variable (x) and a
+split point on that variable (assuming the variable is numeric).
+
+The leaf nodes of the tree contain an output variable (y) which is used
+to make a prediction.
+
+For example, in the titanic surivival analysis, the classification tree
+will be as follows.
+
+\begin{figure}
+\centering
+\includegraphics{./img/Decision_Tree.jpg}
+\caption{Titanic Binary Decision Tree}
+\end{figure}
+
+``sibsp'' is the number of spouses or siblings aboard. The figures under
+the leaves show the probability of survival and the percentage of
+observations in the leaf. Summarizing: Your chances of survival were
+good if you were (i) a female or (ii) a male younger than 9.5 years with
+strictly less than 3 siblings.
+
+Our case is similar but instead off having 3 parameters (gender, age and
+sibsp), we have 30. Crazy eh!
+
+\hypertarget{random-forest}{%
+\subsubsection{Random Forest}\label{random-forest}}
+
+Random forest, like its name implies, consists of a large number of
+individual decision trees that operate as an ensemble. Each individual
+tree in the random forest spits out a class prediction and the class
+with the most votes becomes our model's prediction.
+
+The fundamental concept behind random forest is a simple but powerful
+one --- the wisdom of crowds. In data science speak, the reason that the
+random forest model works so well is: A large number of relatively
+uncorrelated models (trees) operating as a committee will outperform any
+of the individual constituent models.
+
+\hypertarget{xgboost}{%
+\subsubsection{XGBoost}\label{xgboost}}
+
+XGBoost stands for ``Extreme Gradient Boosting'', where the term
+``Gradient Boosting'' originates from the paper Greedy Function
+Approximation: A Gradient Boosting Machine, by Friedman.
+
+XGBoost is used for supervised learning problems, where we use the
+training data (with multiple features) to predict a target variable.
+
+XGBoost minimizes a regularized objective function (L1 and L2) that
+combines a convex loss function (based on the difference between the
+expected and target outputs) and a penalty term for the complexity of
+the model (in other words, the functions of the tree of regression).
+Training continues iteratively, adding new trees that predict the
+residuals or errors from previous trees that are then combined with
+previous trees to make the final prediction. It is called gradient
+augmentation because it uses a gradient descent algorithm to minimize
+loss when adding new models.
+
+\newpage
+
+\newpage
+
+\hypertarget{results}{%
+\section{Results}\label{results}}
+
+Following we will present the results obtained from the procedures
+described above and table sumarizing the results for each one of the
+models used.
+
+\hypertarget{smote-upsampling}{%
+\subsection{SMOTE Upsampling}\label{smote-upsampling}}
+
+As a recap, we saw on table 3 that for the Fraud class we only had 492
+cases in all our data set. We perform the data split and get the next
+results.
+
+\begin{table}[!h]
+
+\caption{\label{tab:data_split}Train Unbalanced Data}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{lr}
+\toprule
+Class & Count\\
+\midrule
+0 & 227452\\
+1 & 394\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!h]
+
+\caption{\label{tab:data_split}Train Balanced Data}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{lr}
+\toprule
+Class & Count\\
+\midrule
+0 & 227452\\
+1 & 227338\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With this, we can see that our upsampling technique seem to work, now it
+is time to check our metrics and if this upsample represents a benefit
+for the model training.
+
+\hypertarget{metrics-evaluation-and-dummy-attempts}{%
+\subsection{Metrics Evaluation and Dummy
+Attempts}\label{metrics-evaluation-and-dummy-attempts}}
+
+Now we will test our dummies attempts. We will show the ROC curves for
+each one of the models and a final table comparing each of the metrics.
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/random_attempt-1} 
+
+}
+
+\caption{ROC Curve for random attempt}\label{fig:random_attempt}
+\end{figure}
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/noFraud_attempt-1} 
+
+}
+
+\caption{ROC Curve for no-Fraud attempt}\label{fig:noFraud_attempt}
+\end{figure}
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/dummyStatistic_attempt-1} 
+
+}
+
+\caption{ROC Curve for statistic attempt}\label{fig:dummyStatistic_attempt}
+\end{figure}
+
+Finally we will show the results obtained from the previous attempts.
+
+\begin{table}[!h]
+
+\caption{\label{tab:dummy_compare}Dummy Attempts Summary}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{lrrr}
+\toprule
+Attempt & Accuracy & F1\_Score & AUC\_Value\\
+\midrule
+Random Choice & 0.4967258 & 0.6633551 & 0.5034533\\
+No-Fraud & 0.9982795 & 0.9991302 & 0.5000000\\
+Statistic & 0.9966117 & 0.9983030 & 0.5008353\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On the above table we can see how AUC gives a better look of how to
+measure our models as F1 Score and Accuracy do not give a correct metric
+of how well our model is performing when clearly we are using a bad
+prediction model.
+
+For this reason we will further use ROC-AUC as our metric for the next
+models.
+
+\hypertarget{cart-results}{%
+\subsection{CART results}\label{cart-results}}
+
+Now we show the result obtained using a CART models, the first of them
+will use the unbalanced data and the second model will use the balanced
+dataset.
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/CART_unbalanced-1} 
+
+}
+
+\caption{ROC Curve for UNBALANCED data CART}\label{fig:CART_unbalanced}
+\end{figure}
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/CART_balanced-1} 
+
+}
+
+\caption{ROC Curve for BALANCED data CART}\label{fig:CART_balanced}
+\end{figure}
+
+Now that we have the ROC curves obtained we can now see if our
+prediction is better with the SMOTE upsample data or not. And it is, as
+its show in the below table.
+
+\begin{table}[!h]
+
+\caption{\label{tab:CART_compare}Balanced vs Unbalanced train data}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{lr}
+\toprule
+Data & AUC\_Value\\
+\midrule
+Unbalanced Fraud cases & 0.9131086\\
+Balanced Fraud Cases & 0.9491560\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\hypertarget{random-forest-1}{%
+\subsection{Random Forest}\label{random-forest-1}}
+
+Now take a look using a Random Forest Approach
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/Random_Forest-1} 
+
+}
+
+\caption{ROC Curve for Random Forest}\label{fig:Random_Forest}
+\end{figure}
+
+This looks pretty great, and we have an Area under the Curve of:
+0.9727891
+
+\hypertarget{xgboost-results}{%
+\subsection{XGBoost results}\label{xgboost-results}}
+
+Now its time to hit our last models, we will see if XGBoost can
+outperform what random forest did
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/xgboost_all-1} 
+
+}
+
+\caption{ROC Curve for XGBoost}\label{fig:xgboost_all}
+\end{figure}
+
+With a AUC value of: 0.9820185
+
+Now take a look to the top 10 feature for this classifier
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/importance_plot-1} 
+
+}
+
+\caption{XGBoost, most important features}\label{fig:importance_plot}
+\end{figure}
+
+Now take a look to what happen if we only chose the top 7 features
+
+\begin{figure}[H]
+
+{\centering \includegraphics[width=0.7\linewidth]{fraudDetectionReport_files/figure-latex/xgboost_top7-1} 
+
+}
+
+\caption{ROC Curve, for XGBoost with top 7 features}\label{fig:xgboost_top7}
+\end{figure}
+
+With a final AUC: 0.9637488. Which is not as good as using all the
+features, but still a good try.
+
+\hypertarget{sumarize}{%
+\subsection{Sumarize}\label{sumarize}}
+
+Just to add up everything we made so far, lets summarize it on a final
+table.
+
+\begin{table}[!h]
+
+\caption{\label{tab:compare_models()}Model Comparison}
+\centering
+\fontsize{10}{12}\selectfont
+\begin{tabular}[t]{lr}
+\toprule
+Model & AUC Value\\
+\midrule
+Random & 0.5034533\\
+noFraud & 0.5000000\\
+Dummy Statistics & 0.5008353\\
+CART no Balance Data & 0.9131086\\
+CART Balanced Data & 0.9491560\\
+Random Forest & 0.9727891\\
+XGBoost & 0.9820185\\
+XGBoost top 7 & 0.9637488\\
+\bottomrule
+\end{tabular}
+\end{table}
+\newpage
+
+\hypertarget{conclussions}{%
+\section{Conclussions}\label{conclussions}}
+
+With this we finalize this project and we can see how XGBoost using all
+the variables outperform all other methods, but the top 7 features not
+laying so far from there, even when random forest did a great job.
+
+Hopefully this project can give some insight about how to make the
+exploratory analysis, deal with unbalanced data, the metrics used for
+this, how to upsample the minority class to improve your training and
+also, we saw several algorithms to make a classification of the given
+data, this will help us in the future how to chose one of them
+considering the trade off between performance, time and the features the
+data has.
+
+\newpage
+
+\hypertarget{references}{%
+\section{References}\label{references}}
+
+Thanks to all the people who made this possible, writing articles or
+papers over this topic or making the dataset available:
+
+\begin{itemize}
+\tightlist
+\item
+  Andrea Dal Pozzolo, Olivier Caelen, Reid A. Johnson and Gianluca
+  Bontempi. Calibrating Probability with Undersampling for Unbalanced
+  Classification. In Symposium on Computational Intelligence and Data
+  Mining (CIDM), IEEE, 2015
+\item
+  Dal Pozzolo, Andrea; Caelen, Olivier; Le Borgne, Yann-Ael;
+  Waterschoot, Serge; Bontempi, Gianluca. Learned lessons in credit card
+  fraud detection from a practitioner perspective, Expert systems with
+  applications,41,10,4915-4928,2014, Pergamon
+\item
+  Dal Pozzolo, Andrea; Boracchi, Giacomo; Caelen, Olivier; Alippi,
+  Cesare; Bontempi, Gianluca. Credit card fraud detection: a realistic
+  modeling and a novel learning strategy, IEEE transactions on neural
+  networks and learning systems,29,8,3784-3797,2018,IEEE
+\item
+  Dal Pozzolo, Andrea Adaptive Machine learning for credit card fraud
+  detection ULB MLG PhD thesis (supervised by G. Bontempi)
+\item
+  Carcillo, Fabrizio; Dal Pozzolo, Andrea; Le Borgne, Yann-Aël; Caelen,
+  Olivier; Mazzer, Yannis; Bontempi, Gianluca. Scarff: a scalable
+  framework for streaming credit card fraud detection with Spark,
+  Information fusion,41, 182-194,2018,Elsevier
+\item
+  Carcillo, Fabrizio; Le Borgne, Yann-Aël; Caelen, Olivier; Bontempi,
+  Gianluca. Streaming active learning strategies for real-life credit
+  card fraud detection: assessment and visualization, International
+  Journal of Data Science and Analytics, 5,4,285-300,2018,Springer
+  International Publishing
+\item
+  Bertrand Lebichot, Yann-Aël Le Borgne, Liyun He, Frederic Oblé,
+  Gianluca Bontempi Deep-Learning Domain Adaptation Techniques for
+  Credit Cards Fraud Detection, INNSBDDL 2019: Recent Advances in Big
+  Data and Deep Learning, pp 78-88, 2019
+\item
+  Fabrizio Carcillo, Yann-Aël Le Borgne, Olivier Caelen, Frederic Oblé,
+  Gianluca Bontempi Combining Unsupervised and Supervised Learning in
+  Credit Card Fraud Detection Information Sciences, 2019
+\item
+  Yann-Aël Le Borgne, Gianluca Bontempi Machine Learning for Credit Card
+  Fraud Detection - Practical Handbook
+\item
+  Chawla, N. V., Bowyer, K. W., Hall, L. O., \& Kegelmeyer, W. P.
+  (2002). SMOTE: synthetic minority over-sampling technique. Journal of
+  artificial intelligence research, 16,
+  321-357.\href{https://arxiv.org/abs/1106.1813}{SMOTE: Synthetic
+  Minority Over-sampling Technique}
+\item
+  Atharva Ingle,
+  \href{https://www.kaggle.com/atharvaingle/credit-card-fraud-detection-with-r-sampling}{Credit
+  Card Fraud Detection with R + (sampling)}
+\item
+  Jason Brownlee
+  \href{https://machinelearningmastery.com/smote-oversampling-for-imbalanced-classification/}{SMOTE
+  for Imbalanced Classification with Python}
+\item
+  Jason Brownlee,
+  \href{https://machinelearningmastery.com/classification-and-regression-trees-for-machine-learning/}{Classification
+  And Regression Trees for Machine Learning}
+\item
+  Tony Yiu,
+  \href{https://towardsdatascience.com/understanding-random-forest-58381e0602d2}{Understanding
+  Random Forest}
+\item
+  \href{https://sitiobigdata.com/2019/01/20/gentle-introduction-of-xgboost-library/\#}{Gentle
+  Introduction of XGBoost Library}
+\end{itemize}
+
+\end{document}
