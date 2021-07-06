@@ -9,7 +9,7 @@ if (!require(Rborist)) install.packages('Rborist')         # for random forest m
 if (!require(corrplot)) install.packages('corrplot')       # for data visualization
 if (!require(ROSE)) install.packages('ROSE')               # for ROC curves
 if (!require(xgboost)) install.packages('xgboost')         # for xgboost curves
-if (!require(knitr)) install.packages("knitr")
+if (!require(knitr)) install.packages("knitr")             # Latex tables
 if (!require(kableExtra)) install.packages('kableExtra')   # for tables
 
 
@@ -129,9 +129,9 @@ ggplot(tsne_mat, aes(x = V1, y = V2)) +
 # remain untouch
 # The upsample method will be SMOTE (synthetic minority oversampling technique)
 
-# Getting our 5 test samples
+# Getting our test samples
 set.seed(2021)
-index <- createDataPartition(y = fraud_data$Class, times = 5, p = .8, list = FALSE)
+index <- createDataPartition(y = fraud_data$Class, p = .8, list = FALSE)
 
 train_data <- fraud_data[index,]
 test_data <- fraud_data[-index,]
@@ -167,7 +167,7 @@ train %>% group_by(class) %>% count()
 # 1.- Random: Choose randomly between 1 and cero to predict our class
 # 2.- No-fraud: Choose always 0, do not make any prediction at all, as is very small all fraud 
 # cases we can say is never fraud
-# 3.- Dumy stadistic: Based on the probability between fraud and no fraud, chose one of them based
+# 3.- Dumy statistic: Based on the probability between fraud and no fraud, chose one of them based
 # on their ocurrance i.e. i if relationship is 10 to 1 predict 10 to 1 ocurrance of the class
 
 # ------------ 1. Random
@@ -188,17 +188,17 @@ y_hat_noFraud[1] <- 1
 noFraud_f1 <- F_meas(data = as.factor(y_hat_noFraud), reference = test_data$Class)
 
 
-# ----------- 3. Dumy Stadistics
+# ----------- 3. Dumy Statistics
 counts <- train_data %>% group_by(Class) %>% count()
 noFraudC <- counts$n[1]
 fraudC <- counts$n[2]
 relationship <- fraudC / (fraudC + noFraudC)
-y_hat_stadistic <- sample(c(0,1), size = size, replace = TRUE, prob = c(1-relationship,relationship))
+y_hat_statistic <- sample(c(0,1), size = size, replace = TRUE, prob = c(1-relationship,relationship))
 
-stadistic_acc <-  accuracy(test_data$Class, y_hat_stadistic)
-stadistic_roc <- ROSE::roc.curve(test_data$Class, y_hat_stadistic, plotit = TRUE)
-stadistic_roc_val <- stadistic_roc$auc
-stadistic_f1 <- F_meas(data = as.factor(y_hat_stadistic), reference = test_data$Class)
+statistic_acc <-  accuracy(test_data$Class, y_hat_statistic)
+statistic_roc <- ROSE::roc.curve(test_data$Class, y_hat_statistic, plotit = TRUE)
+statistic_roc_val <- statistic_roc$auc
+statistic_f1 <- F_meas(data = as.factor(y_hat_statistic), reference = test_data$Class)
 
 # Based on these preliminary metrics we can see that using ROC AUC is much better metric than using
 # F1 or accuracy, we will use this one so on
@@ -288,9 +288,9 @@ xgb_roc_val_t7 <- xgb_roc_t7$auc
 # Conclussions
 
 # Summarizing ROC Scores
-results <- data.frame(Method = c("Random","noFraud","dummy Stadistics",
+results <- data.frame(Method = c("Random","noFraud","dummy Statistics",
                                  "CART no UpSample","CART Upsample","Random Forest","XGBoost","XGBoost top 7"),
-                      ROC_value=c(random_roc_val,noFraud_roc_val, stadistic_roc_val,
+                      ROC_value=c(random_roc_val,noFraud_roc_val, statistic_roc_val,
                                   CART_noSM_roc_val, CART_SM_roc_val, rf_roc_val, xgb_roc_val, xgb_roc_val_t7))
 results
 
